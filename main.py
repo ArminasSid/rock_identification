@@ -10,7 +10,7 @@ def reproject_raster(image_path, output_path, destined_srs='EPSG:4326'):
 
 
 def main():
-    dataset_dir = 'images'
+    dataset_dir = 'validation_dataset'
     rocks_path = 'image_shp/rocks.geojson'
 
     shutil.rmtree(path=dataset_dir, ignore_errors=True)
@@ -20,7 +20,7 @@ def main():
     random_point_generator = RandomPointGenerator()
     random_points = random_point_generator.generate_random_points(
         raster_path=image_path,
-        amount=200,
+        amount=20,
         polygon_restriction=polygon_restriction
     )
     dataset_generator = DatasetGenerator()

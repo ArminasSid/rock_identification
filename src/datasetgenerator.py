@@ -1,3 +1,4 @@
+import enum
 from tkinter import E
 from osgeo import gdal
 import shapely.geometry as geo
@@ -7,6 +8,7 @@ import json
 import affine
 import numpy as np
 import lxml.etree as ET
+from tqdm import tqdm
 
 # No aux.xml files
 gdal.SetConfigOption('GDAL_PAM_ENABLED', 'NO')
@@ -88,17 +90,24 @@ class DatasetGenerator:
                                                     point=bound.upper_left)
             xmax, ymax = self._retrieve_pixel_value(raster=raster,
                                                     point=bound.lower_right)
+            
             if xmax < xmin:
                 xmax, xmin = xmin, xmax
+
+            if ymax < ymin:
+                ymax, ymin = ymin, ymax
 
             if xmin < 0:
                 xmin = 0
             if ymin < 0:
                 ymin = 0
-            if xmax > 500:
-                xmax = 500
-            if ymax > 500:
-                ymax = 500
+            if xmax > 2000:
+                xmax = 2000
+            if ymax > 2000:
+                ymax = 2000
+
+            if xmax == xmin or ymax == ymin:
+                continue
 
             pixel_bounds.append(PixelBounds(
                 xmin=xmin, xmax=xmax,
@@ -156,18 +165,22 @@ class DatasetGenerator:
         dir_img_sets = f'{dir}/Imagesets/Main'
         dir_images = f'{dir}/JPEGImages'
         dir_rasters = f'{dir}/Rasters'
-        os.makedirs(dir_annotations)
-        os.makedirs(dir_img_sets)
-        os.makedirs(dir_images)
-        os.makedirs(dir_rasters)
+
+        dir_annotations = f'{dir}/images'
+        dir_images = f'{dir}/images'
+
+        os.makedirs(dir_annotations, exist_ok=True)
+        os.makedirs(dir_img_sets, exist_ok=True)
+        os.makedirs(dir_images, exist_ok=True)
+        os.makedirs(dir_rasters, exist_ok=True)
 
         prefix = f'image'
-        pixels = 500
+        pixels = 2000
 
         raster_entire = gdal.Open(raster_path)
         bounds = self._read_rock_polygon(rocks_path)
 
-        for i, point in enumerate(points_list):
+        for i, point in tqdm(enumerate(points_list), total=len(points_list)):
             id = f'{prefix}{str(i).zfill(5)}'
             # Warp raster
             # --------------
@@ -180,6 +193,18 @@ class DatasetGenerator:
             )
             raster_polygon = self._get_raster_polygon(raster=raster)
             # --------------
+            # Get rocks
+            filtered_bounds = [bound for bound in bounds
+                               if raster_polygon.contains(bound.upper_left) or
+                               raster_polygon.contains(bound.lower_right)]
+            if not filtered_bounds:
+                continue
+            pixel_bounds = self._get_pixel_bounds(raster=raster,
+                                                  bounds=filtered_bounds)
+            # Create xml file
+            out_xml_name = f'{dir_annotations}/{id}.xml'
+            self._create_xml_file(out_xml_name, pixel_bounds)
+            # --------------
             # Warp jpeg image
             out_jpeg_name = f'{dir_images}/{id}.jpg'
             gdal.Warp(
@@ -188,30 +213,3 @@ class DatasetGenerator:
                 format='JPEG'
             )
             # --------------
-            # Get rocks
-            filtered_bounds = [bound for bound in bounds
-                               if raster_polygon.contains(bound.upper_left) or
-                               raster_polygon.contains(bound.lower_right)]
-            pixel_bounds = self._get_pixel_bounds(raster=raster,
-                                                  bounds=filtered_bounds)
-            # Create xml file
-            out_xml_name = f'{dir_annotations}/{id}.xml'
-            self._create_xml_file(out_xml_name, pixel_bounds)
-            # --------------
-
-            # for bound in filtered_bounds:
-            #     xmin, ymin = self._retrieve_pixel_value(raster=raster,
-            #                                             point=bound.upper_left)
-            #     xmax, ymax = self._retrieve_pixel_value(raster=raster,
-            #                                             point=bound.lower_right)
-            #     if xmax < xmin:
-            #         xmax, xmin = xmin, xmax
-            #     print('---------')
-            #     print(f'xmin={xmin}')
-            #     print(f'ymin={ymin}')
-            #     print(f'xmax={xmax}')
-            #     print(f'ymax={ymax}')
-            #     print('---------')
-            # print('#########')
-            # for pixel_val in test:
-            #     print(pixel_val)
