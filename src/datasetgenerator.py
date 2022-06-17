@@ -1,12 +1,9 @@
-import enum
-from tkinter import E
 from osgeo import gdal
 import shapely.geometry as geo
 import os
 from dataclasses import dataclass
 import json
 import affine
-import numpy as np
 import lxml.etree as ET
 from tqdm import tqdm
 
@@ -159,18 +156,15 @@ class DatasetGenerator:
     def warp_dataset(self, raster_path: str,
                      points_list: list[geo.Point],
                      rocks_path: str,
+                     starting_counter: int,
+                     coord_sys: str,
                      dir='images'):
         # Create required dirs
-        dir_annotations = f'{dir}/Annotations'
-        dir_img_sets = f'{dir}/Imagesets/Main'
-        dir_images = f'{dir}/JPEGImages'
-        dir_rasters = f'{dir}/Rasters'
-
         dir_annotations = f'{dir}/images'
         dir_images = f'{dir}/images'
+        dir_rasters = f'{dir}/Rasters'
 
         os.makedirs(dir_annotations, exist_ok=True)
-        os.makedirs(dir_img_sets, exist_ok=True)
         os.makedirs(dir_images, exist_ok=True)
         os.makedirs(dir_rasters, exist_ok=True)
 
@@ -180,7 +174,7 @@ class DatasetGenerator:
         raster_entire = gdal.Open(raster_path)
         bounds = self._read_rock_polygon(rocks_path)
 
-        for i, point in tqdm(enumerate(points_list), total=len(points_list)):
+        for i, point in tqdm(enumerate(points_list, start=starting_counter), total=len(points_list)):
             id = f'{prefix}{str(i).zfill(5)}'
             # Warp raster
             # --------------

@@ -1,4 +1,5 @@
-from detecto import core, utils, visualize
+import shutil
+from detecto import core, utils
 import numpy as np
 import torch
 import shapely.geometry as geo
@@ -9,7 +10,7 @@ import os
 from tqdm import tqdm
 
 
-print(torch.has_cuda)
+print(f'Cuda is available - {torch.cuda.is_available()}')
 
 
 def load_model(model_file: str, model_name: core.Model = core.Model.DEFAULT):
@@ -25,6 +26,7 @@ def predict(model: core.Model, image: str, threshold: float = 0.7):
     # predictions format: (labels, boxes, scores)
     labels, boxes, scores = predictions
 
+    # Filter based on threshold
     filtered_indices=np.where(scores>threshold)
     filtered_scores=scores[filtered_indices]
     filtered_boxes=boxes[filtered_indices]
@@ -101,8 +103,9 @@ def form_geojson(image: str, boxes: list, output_name):
     geojson.write_to_file(file_path=output_name)
 
 
-def create_polygons(images: list[str], model: core.Model, threshold: float = 0.7):
-    geojson = geojsonformer.GeoJSON()
+def create_polygons(images: list[str], model: core.Model, threshold: float, coord_sys: str):
+    geojson = geojsonformer.GeoJSON(epsg=coord_sys)
+    print(f'Predicting images.')
     for image in tqdm(images):
         raster: gdal.Dataset = gdal.Open(image)
         
@@ -122,11 +125,17 @@ def create_polygons(images: list[str], model: core.Model, threshold: float = 0.7
 
 def main():
     pieces_folder = 'image_pieces'
-    main_raster = 'image_shp/Vadagiai-0.967-orto-210713.tiff'
-    model = 'models/model_pretrained.pth'
+    main_raster = 'Data/Verkne-3.31-210827/Verkne-3.31-orto-210827/Verkne-3.31-orto-210827.tif'
+    model = 'model.pth'
+    prediction_threshold = 0.9
+    epsg = '32634'
 
     # End output of polygons
-    output_name = 'rocks_predict_model_pretrained_0967.geojson'
+    output_dir = f'Data/Verkne-3.31-210827'
+    output_name = f'Verkne-3.31-atr_b_SHP-210827-{prediction_threshold}-thresh-pred'
+    output_path = f'{output_dir}/{output_name}'
+    os.makedirs(output_path, exist_ok=True)
+    output_path = f'{output_path}/{output_name}.geojson'
 
     # Warp main image into pieces
     warper = Warper()
@@ -137,71 +146,12 @@ def main():
 
     images_to_predict = [f'{pieces_folder}/{file}' for file in os.listdir(pieces_folder)]
 
-    geojson = create_polygons(images=images_to_predict, model=model, threshold=0.5)
-    geojson.write_to_file(output_name)
+    geojson = create_polygons(images=images_to_predict, model=model, threshold=prediction_threshold, coord_sys=epsg)
+    geojson.write_to_file(output_path)
 
-    # for image in images_to_predict:
-    #     raster: gdal.Dataset = gdal.Open(image)
-    #     subpolygon = get_raster_subarea_polygon(raster=raster)
-    #     _, boxes, _ = predict(model=model, image=image, threshold=0.7)
-
-
-    # image = 'validation_dataset/Rasters/image00006.tiff'
-
-
-
-    # geojson0 = geojsonformer.GeoJSON()
-    # geojson1 = geojsonformer.GeoJSON()
-    # poly0 = get_raster_polygon(gdal.Open(image))
-    # poly1 = get_raster_subarea_polygon(gdal.Open(image))
-    # poly2 = get_raster_subarea_polygon(gdal.Open(image), 1000)
-    # poly3 = poly0.intersection(poly2)
-
-    # print((poly3.area*100)/poly2.area)
-
-    # geojson0.add_polygon(poly0)
-    # geojson0.add_polygon(poly1)
-    # geojson0.add_polygon(poly2)
-    # geojson0.write_to_file('raster_area_subarea.geojson')
-
-    # geojson1.add_polygon(poly3)
-    # geojson1.write_to_file('raster_intersection.geojson')
-
-    # output_name = 'rocks_predict.geojson'
-
-    
-
-    # labels, boxes, scores = predict(model=model, image=image)
-
-    # form_geojson(image=image, boxes=boxes, output_name=output_name)
+    # Cleanup
+    shutil.rmtree(pieces_folder, ignore_errors=True)
 
 
 if __name__=='__main__':
     main()
-
-# model = core.Model(classes=['rock'], model_name=core.Model.DEFAULT)
-# model.get_internal_model().load_state_dict(torch.load(f='model.pth', map_location=model._device))
-
-# image = utils.read_image('validation_dataset/images/image00006.jpg')
-
-# predictions = model.predict(image)
-
-# # predictions format: (labels, boxes, scores)
-# labels, boxes, scores = predictions
-
-# thresh=0.8
-# filtered_indices=np.where(scores>thresh)
-# print(filtered_indices)
-# filtered_scores=scores[filtered_indices]
-# filtered_boxes=boxes[filtered_indices]
-# num_list = filtered_indices[0].tolist()
-# filtered_labels = [labels[i] for i in num_list]
-
-
-# print(labels)
-
-# print(filtered_boxes[1])
-
-# print(scores)
-
-# visualize.show_labeled_image(image, filtered_boxes)

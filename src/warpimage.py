@@ -1,5 +1,6 @@
 from osgeo import gdal
 import os
+from tqdm import tqdm
 
 
 class Warper:
@@ -13,7 +14,8 @@ class Warper:
         self._create_folder(output_folder=output_folder)
         raster: gdal.Dataset = gdal.Open(raster)
         counter = 0
-        for i in range(0, raster.RasterXSize, step_size):
+        print(f'Warping into - {output_folder}.')
+        for i in tqdm(range(0, raster.RasterXSize, step_size)):
             for j in range(0, raster.RasterYSize, step_size):
                 output_name = f'{output_folder}/image{str(counter).zfill(5)}.tiff'
                 counter += 1
