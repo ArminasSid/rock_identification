@@ -125,14 +125,14 @@ def create_polygons(images: list[str], model: core.Model, threshold: float, coor
 
 def main():
     pieces_folder = 'image_pieces'
-    main_raster = 'Data/Verkne-3.31-210827/Verkne-3.31-orto-210827/Verkne-3.31-orto-210827.tif'
+    main_raster = 'Data/Jura-1.98-210916/Jura-1.98-orto-210916/Jura-1.98-orto-210916.tif'
     model = 'model.pth'
     prediction_threshold = 0.9
     epsg = '32634'
 
     # End output of polygons
-    output_dir = f'Data/Verkne-3.31-210827'
-    output_name = f'Verkne-3.31-atr_b_SHP-210827-{prediction_threshold}-thresh-pred'
+    output_dir = f'Data/Jura-1.98-210916'
+    output_name = f'Jura-1.98-atr_b-210916-{prediction_threshold}-thresh-pred'
     output_path = f'{output_dir}/{output_name}'
     os.makedirs(output_path, exist_ok=True)
     output_path = f'{output_path}/{output_name}.geojson'

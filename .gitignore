@@ -9,9 +9,9 @@
 !README.md
 !LICENCE
 !loadimg.py
-!main.py
+!generatedataset.py
 !predict.py
-!shptogeojson.py
+!convertshapefile.py
 !train.py
 
 # Additionally ignore folders
