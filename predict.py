@@ -143,7 +143,6 @@ def create_output_path(subdirectory: str, threshold: float, prefix: str) -> str:
     output_path = f'{output_path}/{output_name}.geojson'
     return output_path
 
-
 def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg: str, thresholds_to_predict: list, prefix: str):
     # Create image warper instance
     warper = Warper()
