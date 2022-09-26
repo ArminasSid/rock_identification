@@ -20,12 +20,25 @@ class PixelBounds:
     xmax: float
     ymin: float
     ymax: float
+    classification: int
+
+    def get_class_str(self):
+        if self.classification == 1:
+            return 'rock_underwater'
+        elif self.classification == 2:
+            return 'rock'
+        raise KeyError("Suluzo")
 
 
 @dataclass
 class Bound:
     upper_left: geo.Point
     lower_right: geo.Point
+    classification: int = 2
+
+    def __post_init__(self):
+        # Need to cast if someone leaves retarded marking in shapefiles again
+        self.classification = int(self.classification)
 
 
 class DatasetGenerator:
@@ -69,6 +82,24 @@ class DatasetGenerator:
         return bounds
 
     @staticmethod
+    def _read_rock_polygons_by_type(file) -> list[Bound]:
+        json_obj = None
+        bounds = []
+        with open(file) as f:
+            json_obj = json.load(f)
+
+        for feature in json_obj['features']:
+            try:
+                classification = feature['properties']['B2'] # Hardcoded B2 value
+            except KeyError:
+                classification = 2
+            polygon: geo.polygon.Polygon = geo.shape(feature['geometry'])
+            bounds.append(Bound(geo.Point(polygon.exterior.coords[0]),
+                                geo.Point(polygon.exterior.coords[2]),
+                                classification))
+        return bounds
+
+    @staticmethod
     def _retrieve_pixel_value(raster: gdal.Dataset, point: geo.Point):
         """Pixel locations px and py"""
         x, y = point.x, point.y
@@ -108,7 +139,8 @@ class DatasetGenerator:
 
             pixel_bounds.append(PixelBounds(
                 xmin=xmin, xmax=xmax,
-                ymin=ymin, ymax=ymax
+                ymin=ymin, ymax=ymax,
+                classification=bound.classification
             ))
 
         return pixel_bounds
@@ -125,8 +157,7 @@ class DatasetGenerator:
         )
         return raster
 
-    def _create_xml_file(self, output_path: str,
-                         bounds: list[PixelBounds]) -> None:
+    def _create_xml_file(self, output_path: str, bounds: list[PixelBounds], pixel_size: int) -> None:
         xml_obj = ET.Element('annotation')
         image_name, _ = os.path.splitext(os.path.basename(output_path))
         image_name += '.jpg'
@@ -134,14 +165,14 @@ class DatasetGenerator:
         ET.SubElement(xml_obj, 'filename').text = image_name
 
         size = ET.SubElement(xml_obj, 'size')
-        ET.SubElement(size, 'width').text = str(500)
-        ET.SubElement(size, 'height').text = str(500)
+        ET.SubElement(size, 'width').text = str(pixel_size)
+        ET.SubElement(size, 'height').text = str(pixel_size)
         ET.SubElement(size, 'depth').text = str(3)
 
         for bound in bounds:
             obj = ET.SubElement(xml_obj, 'object')
 
-            ET.SubElement(obj, 'name').text = 'rock'
+            ET.SubElement(obj, 'name').text = bound.get_class_str()
             ET.SubElement(obj, 'difficult').text = str(0)
 
             bndbox = ET.SubElement(obj, 'bndbox')
@@ -157,7 +188,6 @@ class DatasetGenerator:
                      points_list: list[geo.Point],
                      rocks_path: str,
                      starting_counter: int,
-                     coord_sys: str,
                      dir='images'):
         # Create required dirs
         dir_annotations = f'{dir}/images'
@@ -169,10 +199,11 @@ class DatasetGenerator:
         os.makedirs(dir_rasters, exist_ok=True)
 
         prefix = f'image'
-        pixels = 2000
+        pixels = 500
 
         raster_entire = gdal.Open(raster_path)
         bounds = self._read_rock_polygon(rocks_path)
+        bounds2 = self._read_rock_polygons_by_type(rocks_path)
 
         for i, point in tqdm(enumerate(points_list, start=starting_counter), total=len(points_list)):
             id = f'{prefix}{str(i).zfill(5)}'
@@ -188,7 +219,7 @@ class DatasetGenerator:
             raster_polygon = self._get_raster_polygon(raster=raster)
             # --------------
             # Get rocks
-            filtered_bounds = [bound for bound in bounds
+            filtered_bounds = [bound for bound in bounds2
                                if raster_polygon.contains(bound.upper_left) or
                                raster_polygon.contains(bound.lower_right)]
             if not filtered_bounds:
@@ -197,7 +228,9 @@ class DatasetGenerator:
                                                   bounds=filtered_bounds)
             # Create xml file
             out_xml_name = f'{dir_annotations}/{id}.xml'
-            self._create_xml_file(out_xml_name, pixel_bounds)
+            self._create_xml_file(output_path=out_xml_name,
+                                  bounds=pixel_bounds,
+                                  pixel_size=pixels)
             # --------------
             # Warp jpeg image
             out_jpeg_name = f'{dir_images}/{id}.jpg'

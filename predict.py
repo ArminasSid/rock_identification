@@ -1,3 +1,4 @@
+from concurrent.futures import thread
 import shutil
 from detecto import core, utils
 import numpy as np
@@ -8,18 +9,20 @@ from geojsonformer import geojsonformer
 from src.warpimage import Warper
 import os
 from tqdm import tqdm
+from glob import glob
+import tempfile
 
 
 print(f'Cuda is available - {torch.cuda.is_available()}')
 
 
-def load_model(model_file: str, model_name: core.Model = core.Model.DEFAULT):
-    model = core.Model(classes=['rock'], model_name=model_name)
+def load_model(model_file: str, classes: list, model_name: core.Model = core.Model.DEFAULT):
+    model = core.Model(classes=classes, model_name=model_name)
     model.get_internal_model().load_state_dict(torch.load(f=model_file, map_location=model._device))
     return model
 
 
-def predict(model: core.Model, image: str, threshold: float = 0.7):
+def predict_image(model: core.Model, image: str, threshold: float = 0.7):
     image = utils.read_image(image)
     predictions = model.predict(image)
 
@@ -103,6 +106,15 @@ def form_geojson(image: str, boxes: list, output_name):
     geojson.write_to_file(file_path=output_name)
 
 
+def get_feature_from_string(name: str) -> geojsonformer.Feature:
+    feature = geojsonformer.Feature(0)
+    if name == 'rock_underwater':
+        feature.add_feature(key='B2', value=1)
+    elif name == 'rock':
+        feature.add_feature(key='B2', value=2)
+    return feature
+
+
 def create_polygons(images: list[str], model: core.Model, threshold: float, coord_sys: str):
     geojson = geojsonformer.GeoJSON(epsg=coord_sys)
     print(f'Predicting images.')
@@ -111,46 +123,85 @@ def create_polygons(images: list[str], model: core.Model, threshold: float, coor
         
         raster_subpolygon = get_raster_subarea_polygon(raster=raster)
 
-        _, boxes, _ = predict(model=model, image=image, threshold=threshold)
+        labels, boxes, _ = predict_image(model=model, image=image, threshold=threshold)
 
-        for box in boxes:
+        for label, box in zip(labels, boxes):
+            feature = get_feature_from_string(label)
             box_polygon = get_polygon_from_pixels(box=box, image=raster)
             intersection_polygon = raster_subpolygon.intersection(box_polygon)
             if intersection_polygon.area/box_polygon.area >= 0.5:
-                geojson.add_polygon(polygon=box_polygon)
+                geojson.add_polygon(polygon=box_polygon, feature=feature)
 
     return geojson
 
 
-
-def main():
-    pieces_folder = 'image_pieces'
-    main_raster = 'Data/Jura-1.98-210916/Jura-1.98-orto-210916/Jura-1.98-orto-210916.tif'
-    model = 'model.pth'
-    prediction_threshold = 0.9
-    epsg = '32634'
-
-    # End output of polygons
-    output_dir = f'Data/Jura-1.98-210916'
-    output_name = f'Jura-1.98-atr_b-210916-{prediction_threshold}-thresh-pred'
-    output_path = f'{output_dir}/{output_name}'
+def create_output_path(subdirectory: str, threshold: float, prefix: str) -> str:
+    name = os.path.basename(os.path.normpath(subdirectory))
+    output_name = f'{name}-pred-{prefix}-{threshold}-thresh-pred'
+    output_path = f'{subdirectory}/{output_name}'
     os.makedirs(output_path, exist_ok=True)
     output_path = f'{output_path}/{output_name}.geojson'
+    return output_path
 
-    # Warp main image into pieces
+
+def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg: str, thresholds_to_predict: list, prefix: str):
+    # Create image warper instance
     warper = Warper()
-    warper.warp_to_pieces(raster=main_raster, output_folder=pieces_folder)
+
+    step_size = int(img_size * 0.8)
+
+    orto_img = glob(f'{subdirectory}/**/*orto*.tif', recursive=True)[0]
+    print(f'Predicting image: {orto_img}')
+
+    # Initialize temporary directory to warp images into, cleans up afterwards
+    with tempfile.TemporaryDirectory() as dir:
+        warper.warp_to_pieces(raster=orto_img, output_folder=dir,
+                                size=img_size, step_size=step_size)
+        images_to_predict = [f'{dir}/{file}' for file in os.listdir(dir)]
+        for threshold in thresholds_to_predict:
+            print(f'Predicting with threshold: {threshold}')
+            output_path = create_output_path(subdirectory=subdirectory, threshold=threshold, prefix=prefix)
+            geojson = create_polygons(images=images_to_predict, model=model, threshold=threshold, coord_sys=epsg)
+            geojson.write_to_file(output_path)
+
+
+def predict(folder: str, model: core.Model, thresholds: float, epsg: str, img_size: int, prefix: str):
+    # Get all subdirectories in main data folder
+    all_subdirectories = glob(f'{folder}/*/')
+
+    for subdirectory in all_subdirectories:
+        classify_directory(subdirectory=subdirectory,
+                           img_size=img_size,
+                           model=model,
+                           epsg=epsg,
+                           thresholds_to_predict=thresholds,
+                           prefix=prefix)
+
+
+def main():
+    main_folder = 'Data'
+    prefix = 'b2'
+    path_to_model = 'model_b2.pth'
+    prediction_thresholds = [0.5, 0.7, 0.9]
+    piece_size = 2000
+    epsg = '32634'
+
+    # fasterrcnn_resnet50_fpn
+    model_name = core.Model.DEFAULT
+    classes = ['rock', 'rock_underwater']
 
     # Object detection model
-    model = load_model(model_file=model, model_name=core.Model.DEFAULT)
+    model = load_model(model_file=path_to_model, 
+                       classes=classes, 
+                       model_name=model_name)
 
-    images_to_predict = [f'{pieces_folder}/{file}' for file in os.listdir(pieces_folder)]
-
-    geojson = create_polygons(images=images_to_predict, model=model, threshold=prediction_threshold, coord_sys=epsg)
-    geojson.write_to_file(output_path)
-
-    # Cleanup
-    shutil.rmtree(pieces_folder, ignore_errors=True)
+    # Predict folder of orto images
+    predict(folder=main_folder,
+            model=model,
+            thresholds=prediction_thresholds,
+            epsg=epsg,
+            img_size=piece_size,
+            prefix=prefix)
 
 
 if __name__=='__main__':

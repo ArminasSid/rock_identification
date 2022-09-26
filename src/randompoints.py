@@ -18,11 +18,13 @@ class RandomPointGenerator:
 
     @staticmethod
     def _read_polygon(file):
+        polygons = []
         json_obj = None
         with open(file) as f:
             json_obj = json.load(f)
-        polygon: geo.Polygon = geo.shape(json_obj['features'][0]['geometry'])
-        return polygon
+        for feature in json_obj['features']:
+            polygons.append(geo.shape(feature['geometry']))
+        return polygons
 
     def generate_random_points(self, raster_path: str, amount: int,
                                polygon_restriction: str) -> list[geo.Point]:
@@ -30,11 +32,13 @@ class RandomPointGenerator:
         ulx, uly, lrx, lry = RandomPointGenerator._get_raster_edges(
             image_path=raster_path
         )
-        polygon = RandomPointGenerator._read_polygon(polygon_restriction)
+        polygons = RandomPointGenerator._read_polygon(polygon_restriction)
         while amount != 0:
             point: geo.Point = geo.Point((random.uniform(ulx, lrx),
                                           random.uniform(uly, lry)))
-            if polygon.contains(point):
-                random_points.append(point)
-                amount -= 1
+            for polygon in polygons:
+                if polygon.contains(point):
+                    random_points.append(point)
+                    amount -= 1
+                    break
         return random_points
