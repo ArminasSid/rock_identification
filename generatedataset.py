@@ -41,8 +41,8 @@ def create_dataset(main_folder: str, output_folder: str, dataset_name: str, iter
 
 
 def main():
-    main_folder = 'Data_alt'
-    output_dataset_folder = 'dataset_b2_500'
+    main_folder = 'Data'
+    output_dataset_folder = 'dataset_b2_pascal'
 
     # Training dataset
     print('Generating training dataset...')

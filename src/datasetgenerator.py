@@ -190,7 +190,7 @@ class DatasetGenerator:
                      starting_counter: int,
                      dir='images'):
         # Create required dirs
-        dir_annotations = f'{dir}/images'
+        dir_annotations = f'{dir}/annotations'
         dir_images = f'{dir}/images'
         dir_rasters = f'{dir}/Rasters'
 
@@ -199,7 +199,7 @@ class DatasetGenerator:
         os.makedirs(dir_rasters, exist_ok=True)
 
         prefix = f'image'
-        pixels = 500
+        pixels = 2000
 
         raster_entire = gdal.Open(raster_path)
         bounds = self._read_rock_polygon(rocks_path)

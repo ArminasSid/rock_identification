@@ -1,5 +1,6 @@
 from concurrent.futures import thread
 import shutil
+from xmlrpc.client import Boolean
 from detecto import core, utils
 import numpy as np
 import torch
@@ -11,9 +12,22 @@ import os
 from tqdm import tqdm
 from glob import glob
 import tempfile
+import json
+
+from src.yolopredictor import load_model as load_yolo_model
+from src.yolopredictor import predict as predict_yolo
 
 
 print(f'Cuda is available - {torch.cuda.is_available()}')
+
+def read_polygons(file):
+    polygons = []
+    json_obj = None
+    with open(file) as f:
+        json_obj = json.load(f)
+    for feature in json_obj['features']:
+        polygons.append(geo.shape(feature['geometry']))
+    return polygons
 
 
 def load_model(model_file: str, classes: list, model_name: core.Model = core.Model.DEFAULT):
@@ -95,6 +109,18 @@ def get_polygon_from_pixels(box, image: gdal.Dataset):
 
     return geo.polygon.Polygon((ul, ur, lr, ll, ul))
 
+def get_polygon_from_pixels_yolo(box, image: gdal.Dataset):
+    # Get pixel coordinates
+    xmin, ymin, xmax, ymax = box[0], box[1], box[2], box[3]
+
+    # Get geocoordinates
+    ul = geo.Point(pixel(image=image, dx=xmin, dy=ymin))
+    ur = geo.Point(pixel(image=image, dx=xmax, dy=ymin))
+    lr = geo.Point(pixel(image=image, dx=xmax, dy=ymax))
+    ll = geo.Point(pixel(image=image, dx=xmin, dy=ymax))
+
+    return geo.polygon.Polygon((ul, ur, lr, ll, ul))
+
 
 def form_geojson(image: str, boxes: list, output_name):
     img = gdal.Open(image)
@@ -115,7 +141,14 @@ def get_feature_from_string(name: str) -> geojsonformer.Feature:
     return feature
 
 
-def create_polygons(images: list[str], model: core.Model, threshold: float, coord_sys: str):
+def intersects_with_bounds(polygon: geo.Polygon, bound_polygons: list[geo.Polygon]) -> Boolean:
+    for bound in bound_polygons:
+        if polygon.intersection(bound).area > 0:
+            return True
+    return False
+
+
+def create_polygons(images: list[str], model: core.Model, threshold: float, coord_sys: str, bound_polygons: list[geo.Polygon]):
     geojson = geojsonformer.GeoJSON(epsg=coord_sys)
     print(f'Predicting images.')
     for image in tqdm(images):
@@ -123,14 +156,16 @@ def create_polygons(images: list[str], model: core.Model, threshold: float, coor
         
         raster_subpolygon = get_raster_subarea_polygon(raster=raster)
 
-        labels, boxes, _ = predict_image(model=model, image=image, threshold=threshold)
+        # labels, boxes, _ = predict_image(model=model, image=image, threshold=threshold)
+        labels, boxes, _ = predict_yolo(model=model, image_to_predict=image, conf_thresh=threshold)
 
         for label, box in zip(labels, boxes):
             feature = get_feature_from_string(label)
-            box_polygon = get_polygon_from_pixels(box=box, image=raster)
+            box_polygon = get_polygon_from_pixels_yolo(box=box, image=raster)
             intersection_polygon = raster_subpolygon.intersection(box_polygon)
             if intersection_polygon.area/box_polygon.area >= 0.5:
-                geojson.add_polygon(polygon=box_polygon, feature=feature)
+                if intersects_with_bounds(polygon=box_polygon, bound_polygons=bound_polygons):
+                    geojson.add_polygon(polygon=box_polygon, feature=feature)
 
     return geojson
 
@@ -144,6 +179,9 @@ def create_output_path(subdirectory: str, threshold: float, prefix: str) -> str:
     return output_path
 
 def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg: str, thresholds_to_predict: list, prefix: str):
+    # Get outline polygons of prediction area
+    outline_polygons = read_polygons(file=glob(f'{subdirectory}/**/*HMU-clip*.geojson')[0])
+
     # Create image warper instance
     warper = Warper()
 
@@ -160,7 +198,9 @@ def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg
         for threshold in thresholds_to_predict:
             print(f'Predicting with threshold: {threshold}')
             output_path = create_output_path(subdirectory=subdirectory, threshold=threshold, prefix=prefix)
-            geojson = create_polygons(images=images_to_predict, model=model, threshold=threshold, coord_sys=epsg)
+            geojson = create_polygons(images=images_to_predict, model=model, 
+                                      threshold=threshold, coord_sys=epsg,
+                                      bound_polygons=outline_polygons)
             geojson.write_to_file(output_path)
 
 
@@ -179,15 +219,15 @@ def predict(folder: str, model: core.Model, thresholds: float, epsg: str, img_si
 
 def main():
     main_folder = 'Data'
-    prefix = 'b2'
-    path_to_model = 'model_b2.pth'
+    prefix = 'b'
+    path_to_model = 'model_b.pth'
     prediction_thresholds = [0.5, 0.7, 0.9]
     piece_size = 2000
     epsg = '32634'
 
     # fasterrcnn_resnet50_fpn
     model_name = core.Model.DEFAULT
-    classes = ['rock', 'rock_underwater']
+    classes = ['rock']
 
     # Object detection model
     model = load_model(model_file=path_to_model, 
@@ -202,6 +242,26 @@ def main():
             img_size=piece_size,
             prefix=prefix)
 
+def main_yolo():
+    main_folder = 'Data'
+    prefix = 'b'
+    path_to_model = 'yolo_b/best.pt'
+    path_to_data = 'yolo_b/data.yaml'
+    prediction_thresholds = [0.5, 0.7, 0.9]
+    piece_size = 2000
+    epsg = '32634'
+
+    # Object detection model
+    model = load_yolo_model(weights=path_to_model, data=path_to_data)
+
+    # Predict folder of orto images
+    predict(folder=main_folder,
+            model=model,
+            thresholds=prediction_thresholds,
+            epsg=epsg,
+            img_size=piece_size,
+            prefix=prefix)
+
 
 if __name__=='__main__':
-    main()
+    main_yolo()

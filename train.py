@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import random
+import json
 import torch
 import torchvision
 
@@ -124,7 +125,10 @@ class Model:
         if val_dataset is not None and not isinstance(val_dataset, DataLoader):
             val_dataset = DataLoader(val_dataset)
 
-        losses = []
+        losses = {
+            'training': [],
+            'validation': []
+        }
         # Get parameters that have grad turned on (i.e. parameters that should be trained)
         parameters = [p for p in self._model.parameters() if p.requires_grad]
         # Create an optimizer that uses SGD (stochastic gradient descent) to train the parameters
@@ -163,6 +167,7 @@ class Model:
                 optimizer.step()
             
             training_avg_loss /= len(dataset.dataset)
+            losses['training'].append(training_avg_loss)
             if verbose:
                 print(f'Training loss: {training_avg_loss}')
 
@@ -182,7 +187,7 @@ class Model:
                         validation_avg_loss += total_loss.item()
 
                 validation_avg_loss /= len(val_dataset.dataset)
-                losses.append(validation_avg_loss)
+                losses['validation'].append(validation_avg_loss)
 
                 if verbose:
                     print('Validation loss: {}'.format(validation_avg_loss))
@@ -221,15 +226,23 @@ class Model:
         targets = [{k: v.to(self._device) for k, v in t.items()} for t in targets]
         return images, targets
 
+
+def write_losses_to_file(losses: dict, file: str):
+    with open(file, 'w') as fp:
+        json.dump(losses, fp)
+
+
 def main():
     print(f'Cuda is available - {torch.cuda.is_available()}')
+    output_file = 'model_b2'
+    dataset = 'dataset_b2'
 
-    model_output_path = 'model_b2.pth'
-    dataset = 'dataset_b2_1k'
+    model_output_path = f'{output_file}.pth'
+    stats_output_path = f'{output_file}.json'
 
     transform = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
+        transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -250,7 +263,7 @@ def main():
     )
 
     model.save(file=model_output_path)
-
+    write_losses_to_file(losses=losses, file=stats_output_path)
 
 if __name__=='__main__':
     main()
