@@ -27,6 +27,11 @@ class PixelBounds:
             return 'rock_underwater'
         elif self.classification == 2:
             return 'rock'
+        else:
+            print(f'Keista verte: {self.classification}')
+            print(f'Tipas: {type(self.classification)}')
+            return 'rock'
+        print(f'Rasta: {self.classification}')
         raise KeyError("Suluzo")
 
 
@@ -190,7 +195,7 @@ class DatasetGenerator:
                      starting_counter: int,
                      dir='images'):
         # Create required dirs
-        dir_annotations = f'{dir}/annotations'
+        dir_annotations = f'{dir}/images'
         dir_images = f'{dir}/images'
         dir_rasters = f'{dir}/Rasters'
 

@@ -26,13 +26,23 @@ class RandomPointGenerator:
             polygons.append(geo.shape(feature['geometry']))
         return polygons
 
+    @staticmethod
+    def _read_polygons(files):
+        if isinstance(files, str):
+            return RandomPointGenerator._read_polygon(files)
+        elif isinstance(files, list):
+            polygons = []
+            for file in files:
+                polygons.extend(RandomPointGenerator._read_polygon(file))
+            return polygons
+
     def generate_random_points(self, raster_path: str, amount: int,
-                               polygon_restriction: str) -> list[geo.Point]:
+                               polygon_restriction: str | list) -> list[geo.Point]:
         random_points = []
         ulx, uly, lrx, lry = RandomPointGenerator._get_raster_edges(
             image_path=raster_path
         )
-        polygons = RandomPointGenerator._read_polygon(polygon_restriction)
+        polygons = RandomPointGenerator._read_polygons(polygon_restriction)
         while amount != 0:
             point: geo.Point = geo.Point((random.uniform(ulx, lrx),
                                           random.uniform(uly, lry)))

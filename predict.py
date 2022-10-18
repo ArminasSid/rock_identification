@@ -20,6 +20,7 @@ from src.yolopredictor import predict as predict_yolo
 
 print(f'Cuda is available - {torch.cuda.is_available()}')
 
+
 def read_polygons(file):
     polygons = []
     json_obj = None
@@ -32,7 +33,8 @@ def read_polygons(file):
 
 def load_model(model_file: str, classes: list, model_name: core.Model = core.Model.DEFAULT):
     model = core.Model(classes=classes, model_name=model_name)
-    model.get_internal_model().load_state_dict(torch.load(f=model_file, map_location=model._device))
+    model.get_internal_model().load_state_dict(
+        torch.load(f=model_file, map_location=model._device))
     return model
 
 
@@ -44,9 +46,9 @@ def predict_image(model: core.Model, image: str, threshold: float = 0.7):
     labels, boxes, scores = predictions
 
     # Filter based on threshold
-    filtered_indices=np.where(scores>threshold)
-    filtered_scores=scores[filtered_indices]
-    filtered_boxes=boxes[filtered_indices]
+    filtered_indices = np.where(scores > threshold)
+    filtered_scores = scores[filtered_indices]
+    filtered_boxes = boxes[filtered_indices]
     num_list = filtered_indices[0].tolist()
     filtered_labels = [labels[i] for i in num_list]
 
@@ -56,7 +58,7 @@ def predict_image(model: core.Model, image: str, threshold: float = 0.7):
 def pixel(image: gdal.Dataset, dx, dy):
     xoffset, px_w, rot1, yoffset, rot2, px_h = image.GetGeoTransform()
 
-    # supposing x and y are your pixel coordinate this 
+    # supposing x and y are your pixel coordinate this
     # is how to get the coordinate in space.
     posX = px_w * dx + rot1 * dy + xoffset
     posY = rot2 * dx + px_h * dy + yoffset
@@ -109,6 +111,7 @@ def get_polygon_from_pixels(box, image: gdal.Dataset):
 
     return geo.polygon.Polygon((ul, ur, lr, ll, ul))
 
+
 def get_polygon_from_pixels_yolo(box, image: gdal.Dataset):
     # Get pixel coordinates
     xmin, ymin, xmax, ymax = box[0], box[1], box[2], box[3]
@@ -128,7 +131,7 @@ def form_geojson(image: str, boxes: list, output_name):
 
     for box in boxes:
         geojson.add_polygon(get_polygon_from_pixels(box=box, image=img))
-    
+
     geojson.write_to_file(file_path=output_name)
 
 
@@ -153,11 +156,12 @@ def create_polygons(images: list[str], model: core.Model, threshold: float, coor
     print(f'Predicting images.')
     for image in tqdm(images):
         raster: gdal.Dataset = gdal.Open(image)
-        
+
         raster_subpolygon = get_raster_subarea_polygon(raster=raster)
 
         # labels, boxes, _ = predict_image(model=model, image=image, threshold=threshold)
-        labels, boxes, _ = predict_yolo(model=model, image_to_predict=image, conf_thresh=threshold)
+        labels, boxes, _ = predict_yolo(
+            model=model, image_to_predict=image, conf_thresh=threshold)
 
         for label, box in zip(labels, boxes):
             feature = get_feature_from_string(label)
@@ -170,17 +174,19 @@ def create_polygons(images: list[str], model: core.Model, threshold: float, coor
     return geojson
 
 
-def create_output_path(subdirectory: str, threshold: float, prefix: str) -> str:
+def create_output_path(subdirectory: str, threshold: float, prefix: str, weight_prefix: str) -> str:
     name = os.path.basename(os.path.normpath(subdirectory))
     output_name = f'{name}-pred-{prefix}-{threshold}-thresh-pred'
-    output_path = f'{subdirectory}/{output_name}'
+    output_path = f'{subdirectory}/{weight_prefix}/{output_name}'
     os.makedirs(output_path, exist_ok=True)
     output_path = f'{output_path}/{output_name}.geojson'
     return output_path
 
-def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg: str, thresholds_to_predict: list, prefix: str):
+
+def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg: str, thresholds_to_predict: list, prefix: str, weight_prefix: str):
     # Get outline polygons of prediction area
-    outline_polygons = read_polygons(file=glob(f'{subdirectory}/**/*HMU-clip*.geojson')[0])
+    outline_polygons = read_polygons(
+        file=glob(f'{subdirectory}/**/*HMU-clip*.geojson')[0])
 
     # Create image warper instance
     warper = Warper()
@@ -193,18 +199,21 @@ def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg
     # Initialize temporary directory to warp images into, cleans up afterwards
     with tempfile.TemporaryDirectory() as dir:
         warper.warp_to_pieces(raster=orto_img, output_folder=dir,
-                                size=img_size, step_size=step_size)
+                              size=img_size, step_size=step_size)
         images_to_predict = [f'{dir}/{file}' for file in os.listdir(dir)]
         for threshold in thresholds_to_predict:
             print(f'Predicting with threshold: {threshold}')
-            output_path = create_output_path(subdirectory=subdirectory, threshold=threshold, prefix=prefix)
-            geojson = create_polygons(images=images_to_predict, model=model, 
+            output_path = create_output_path(subdirectory=subdirectory,
+                                             threshold=threshold,
+                                             prefix=prefix,
+                                             weight_prefix=weight_prefix)
+            geojson = create_polygons(images=images_to_predict, model=model,
                                       threshold=threshold, coord_sys=epsg,
                                       bound_polygons=outline_polygons)
             geojson.write_to_file(output_path)
 
 
-def predict(folder: str, model: core.Model, thresholds: float, epsg: str, img_size: int, prefix: str):
+def predict(folder: str, model: core.Model, thresholds: float, epsg: str, img_size: int, prefix: str, weight_prefix: str):
     # Get all subdirectories in main data folder
     all_subdirectories = glob(f'{folder}/*/')
 
@@ -214,7 +223,8 @@ def predict(folder: str, model: core.Model, thresholds: float, epsg: str, img_si
                            model=model,
                            epsg=epsg,
                            thresholds_to_predict=thresholds,
-                           prefix=prefix)
+                           prefix=prefix,
+                           weight_prefix=weight_prefix)
 
 
 def main():
@@ -230,8 +240,8 @@ def main():
     classes = ['rock']
 
     # Object detection model
-    model = load_model(model_file=path_to_model, 
-                       classes=classes, 
+    model = load_model(model_file=path_to_model,
+                       classes=classes,
                        model_name=model_name)
 
     # Predict folder of orto images
@@ -242,11 +252,13 @@ def main():
             img_size=piece_size,
             prefix=prefix)
 
+
 def main_yolo():
     main_folder = 'Data'
-    prefix = 'b'
-    path_to_model = 'yolo_b/best.pt'
-    path_to_data = 'yolo_b/data.yaml'
+    prefix = 'b3'
+    path_to_model = 'weights/yolo-train1234-valid5/best.pt'
+    path_to_data = 'weights/yolo-train1234-valid5/data-train1234-valid5.yaml'
+    weight_prefix = 'train1234-valid5'
     prediction_thresholds = [0.5, 0.7, 0.9]
     piece_size = 2000
     epsg = '32634'
@@ -260,8 +272,9 @@ def main_yolo():
             thresholds=prediction_thresholds,
             epsg=epsg,
             img_size=piece_size,
-            prefix=prefix)
+            prefix=prefix,
+            weight_prefix=weight_prefix)
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main_yolo()

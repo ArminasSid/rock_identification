@@ -28,7 +28,7 @@ def create_dataset(main_folder: str, output_folder: str, dataset_name: str, iter
     all_subdirectories = glob(f'{main_folder}/*/')
 
     for subdirectory in all_subdirectories:
-        objects_path = glob(f'{subdirectory}/**/*atr_b2*.geojson', recursive=True)[0]
+        objects_path = glob(f'{subdirectory}/**/*atr_b3*.geojson', recursive=True)[0]
         image_path = glob(f'{subdirectory}/**/*orto*.tif', recursive=True)[0]
         outline_path = glob(f'{subdirectory}/*{dataset_name}*.geojson')[0]
         generate_dataset(output_dataset_folder=f'{output_folder}/{dataset_name}_dataset',
@@ -42,7 +42,7 @@ def create_dataset(main_folder: str, output_folder: str, dataset_name: str, iter
 
 def main():
     main_folder = 'Data'
-    output_dataset_folder = 'dataset_b2_pascal'
+    output_dataset_folder = 'dataset_b3'
 
     # Training dataset
     print('Generating training dataset...')
