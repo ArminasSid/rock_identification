@@ -7,14 +7,14 @@ from yolov5.utils.dataloaders import LoadImages
 from yolov5.utils.general import Profile, check_img_size, non_max_suppression, scale_coords
 from yolov5.utils.torch_utils import select_device, smart_inference_mode
 
-def load_model(weights: str, data: str):
+def load_model(weights: str):
     device = ''  # cuda device, i.e. 0 or 0,1,2,3 or cpu
     dnn = False  # use OpenCV DNN for ONNX inference
     half = False  # use FP16 half-precision inference
 
     # Load model
     device = select_device(device)
-    model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)
+    model = DetectMultiBackend(weights, device=device, dnn=dnn, fp16=half)
 
     return model
 

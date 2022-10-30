@@ -14,12 +14,12 @@ def change_vector_format(infile: str, outfile: str) -> None:
 
 def main():
     # Gather all input files
-    input_files = glob('**/*.shp', recursive=True)
+    input_files = glob('Data/**/*thresh-pred.geojson', recursive=True)
 
     # Gather all output file paths
     output_files = []
     for input_file in input_files:
-        output_files.append(os.path.splitext(input_file)[0] + '.geojson')
+        output_files.append(os.path.splitext(input_file)[0] + '.shp')
 
     # Convert all .shp files to .geojson format
     iterable = zip(input_files, output_files)

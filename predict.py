@@ -193,7 +193,7 @@ def classify_directory(subdirectory: str, img_size: int, model: core.Model, epsg
 
     step_size = int(img_size * 0.8)
 
-    orto_img = glob(f'{subdirectory}/**/*orto*.tif', recursive=True)[0]
+    orto_img = glob(f'{subdirectory}/**/*orto_clipped*.tif', recursive=True)[0]
     print(f'Predicting image: {orto_img}')
 
     # Initialize temporary directory to warp images into, cleans up afterwards
@@ -256,15 +256,14 @@ def main():
 def main_yolo():
     main_folder = 'Data'
     prefix = 'b3'
-    path_to_model = 'weights/yolo-train1234-valid5/best.pt'
-    path_to_data = 'weights/yolo-train1234-valid5/data-train1234-valid5.yaml'
-    weight_prefix = 'train1234-valid5'
+    weight_prefix = 'train2345-valid1'
+    path_to_model = f'weights/{weight_prefix}/best.pt'
     prediction_thresholds = [0.5, 0.7, 0.9]
     piece_size = 2000
     epsg = '32634'
 
     # Object detection model
-    model = load_yolo_model(weights=path_to_model, data=path_to_data)
+    model = load_yolo_model(weights=path_to_model)
 
     # Predict folder of orto images
     predict(folder=main_folder,
