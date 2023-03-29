@@ -27,9 +27,12 @@ def create_dataset(main_folder: str, output_folder: str, dataset_name: str, iter
     starting_counter = 0
     all_subdirectories = glob(f'{main_folder}/*/')
 
+    all_subdirectories = [subdirectory for subdirectory in all_subdirectories if 'Musa' not in subdirectory]
+
     for subdirectory in all_subdirectories:
         objects_path = glob(f'{subdirectory}/**/*atr_b3*.geojson', recursive=True)[0]
         image_path = glob(f'{subdirectory}/**/*orto*.tif', recursive=True)[0]
+        print(f'{subdirectory}/*{dataset_name}*.geojson')
         outline_path = glob(f'{subdirectory}/*{dataset_name}*.geojson')[0]
         generate_dataset(output_dataset_folder=f'{output_folder}/{dataset_name}_dataset',
                          input_objects_path=objects_path,

@@ -12,7 +12,10 @@
 !generatedataset.py
 !predict.py
 !convertshapefile.py
+!generatedataset_k_fold_v2.py
+!warp_to_cutline.py
 !train.py
+!yolov5s.pt
 
 # Additionally ignore folders
 /**/__pycache__

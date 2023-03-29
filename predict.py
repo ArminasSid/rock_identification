@@ -217,6 +217,8 @@ def predict(folder: str, model: core.Model, thresholds: float, epsg: str, img_si
     # Get all subdirectories in main data folder
     all_subdirectories = glob(f'{folder}/*/')
 
+    all_subdirectories = [subdirectory for subdirectory in all_subdirectories if 'Musa' in subdirectory]
+
     for subdirectory in all_subdirectories:
         classify_directory(subdirectory=subdirectory,
                            img_size=img_size,
